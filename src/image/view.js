@@ -2,7 +2,7 @@ import {Index} from '../math/index.js';
 import {ModalityLut, isLutBitsStored} from './modalityLut.js';
 import {WindowLut} from './windowLut.js';
 import {luts} from './luts.js';
-import {VoiLut} from './voiLut.js';
+import {VoiLut, VoiLutFunctionNames} from './voiLut.js';
 import {
   WindowLevel,
   equalWl,
@@ -561,6 +561,29 @@ export class View extends EventTarget {
   }
 
   /**
+   * Resolve the VOI LUT function name for this view.
+   * Uses {@link Image} meta `VOILUTFunction` when set. Otherwise float
+   * buffers and PET (`Modality` PT) default to LINEAR_EXACT so that
+   * center/width of `(min+max)/2` and `(max-min)` (see
+   * {@link View#getWindowLevelMinMax}) cover the full range; LINEAR's
+   * ±0.5/(w−1) offsets target discrete gray levels and mis-map
+   * continuous / rescaled intensities.
+   * Ref: DICOM PS3.3 C.11.2.1.2 / C.11.2.1.3.
+   *
+   * @returns {string} The VOI LUT function name.
+   */
+  #getVoiLutFunctionName() {
+    const name = this.#image.getMeta().VOILUTFunction;
+    if (typeof name !== 'undefined') {
+      return name;
+    }
+    if (this.#isFloat() || this.#image.getMeta().Modality === 'PT') {
+      return VoiLutFunctionNames.linear_exact;
+    }
+    return VoiLutFunctionNames.linear;
+  }
+
+  /**
    * Check if the image data can use pre-computed lookup tables:
    *   integer data with a limited number of bits stored.
    *
@@ -651,7 +674,7 @@ export class View extends EventTarget {
       // set lut window level
       const newVoiLut = new VoiLut(
         this.#currentWl,
-        this.#image.getMeta().VOILUTFunction
+        this.#getVoiLutFunctionName()
       );
       this.#windowLut.setVoiLut(newVoiLut);
     }
@@ -1008,7 +1031,7 @@ export class View extends EventTarget {
     const wlBound = validateWindowLevel(
       wl,
       this.#image.getRescaledDataRange(),
-      this.#image.getMeta().VOILUTFunction
+      this.#getVoiLutFunctionName()
     );
 
     // check if new wl
@@ -1122,7 +1145,7 @@ export class View extends EventTarget {
     return validateWindowLevel(
       new WindowLevel(center, width),
       range,
-      this.#image.getMeta().VOILUTFunction
+      this.#getVoiLutFunctionName()
     );
   }
 

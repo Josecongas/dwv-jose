@@ -253,18 +253,21 @@ describe('image', () => {
       // call generate data
       view0.generateImageData(imageData);
       // rescaled values: [-3, 0.5, 4, 7.5]
+      // Float defaults to LINEAR_EXACT with center/width from minmax
+      // (not LINEAR's 0, 93, 187, 255). Middle value floors to 84 in JS
+      // ((1/3)*255 → 84.999…).
       const theoData0 = [
         0,
         0,
         0,
         255,
-        93,
-        93,
-        93,
+        84,
+        84,
+        84,
         255,
-        187,
-        187,
-        187,
+        170,
+        170,
+        170,
         255,
         255,
         255,
@@ -275,6 +278,68 @@ describe('image', () => {
         'check image data');
     }
   );
+
+  /**
+   * Float views honour an explicit LINEAR VOILUTFunction from meta.
+   *
+   * @function module:tests/image~generateDataMonoFloatLinearMeta
+   */
+  test('Generate data MONO float with explicit LINEAR VOI', () => {
+    const size0 = 2;
+    const imgSize0 = new Size([size0, size0, 1]);
+    const imgSpacing0 = new Spacing([1, 1, 1]);
+    const imgOrigin0 = new Point3D(0, 0, 0);
+    const imgGeometry0 = new Geometry([imgOrigin0], imgSize0, imgSpacing0);
+    const buffer0 = new Float32Array([-1.5, 0.25, 2, 3.75]);
+    const image0 = new Image(imgGeometry0, buffer0);
+    image0.setMeta({BitsAllocated: 32, VOILUTFunction: 'LINEAR'});
+    image0.setRescaleSlopeAndIntercept(new RescaleSlopeAndIntercept(2, 0));
+    const view0 = new View(image0);
+    const imageData = {
+      width: size0,
+      height: size0,
+      data: new Uint8ClampedArray(size0 * size0 * 4)
+    };
+
+    view0.setWindowLevelMinMax();
+    view0.generateImageData(imageData);
+    assert.deepEqual(
+      Array.from(imageData.data),
+      [0, 0, 0, 255, 93, 93, 93, 255, 187, 187, 187, 255, 255, 255, 255, 255],
+      'explicit LINEAR keeps legacy float mapping'
+    );
+  });
+
+  /**
+   * Integer PET defaults to LINEAR_EXACT (same mapping as float minmax).
+   *
+   * @function module:tests/image~generateDataMonoPetLinearExact
+   */
+  test('Generate data MONO PET integer uses LINEAR_EXACT by default', () => {
+    const size0 = 2;
+    const imgSize0 = new Size([size0, size0, 1]);
+    const imgSpacing0 = new Spacing([1, 1, 1]);
+    const imgOrigin0 = new Point3D(0, 0, 0);
+    const imgGeometry0 = new Geometry([imgOrigin0], imgSize0, imgSpacing0);
+    const buffer0 = [0, 1, 2, 3];
+    const image0 = new Image(imgGeometry0, buffer0);
+    image0.setMeta({BitsStored: 8, Modality: 'PT'});
+    const view0 = new View(image0);
+    const imageData = {
+      width: size0,
+      height: size0,
+      data: new Uint8ClampedArray(size0 * size0 * 4)
+    };
+
+    view0.setWindowLevelMinMax();
+    view0.generateImageData(imageData);
+    // range [0, 3], LINEAR_EXACT; discrete LUT rounds (1/3)*255 → 85
+    assert.deepEqual(
+      Array.from(imageData.data),
+      [0, 0, 0, 255, 85, 85, 85, 255, 170, 170, 170, 255, 255, 255, 255, 255],
+      'PET integer defaults to LINEAR_EXACT'
+    );
+  });
 
   /**
    * Tests for {@link View} generateImageData MONO with 32 bits
